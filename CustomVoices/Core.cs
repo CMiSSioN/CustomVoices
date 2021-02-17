@@ -372,6 +372,13 @@ namespace CustomVoices {
         prevStopEvent = string.Empty;
       }
       if (string.IsNullOrEmpty(voice)) { Log.M.WL(1, "empty voice"); return true; }
+      if (voice == "pilot_player_computer") {
+        Log.M.WL(1, "voice is pilot_player_computer");
+        WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
+        WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
+        WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
+        return false;
+      }
       if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M.WL(1, "voice is default"); return true; }
       if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
         if (string.IsNullOrEmpty(voicePack.vobank)) { Log.M.WL(1, "empty vobank"); return true; };
@@ -439,6 +446,13 @@ namespace CustomVoices {
       //if (p.pilotDef.Description.Id == "pilot_backer_SwansonA") { p.pilotDef.SetVoice("tex_voice"); };
       string voice = p.pilotDef.Voice;
       if (string.IsNullOrEmpty(voice)) { Log.M.WL(1, "empty voice"); return true; }
+      if (voice == "pilot_player_computer") {
+        Log.M.WL(1, "voice is pilot_player_computer");
+        WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
+        WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
+        WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
+        return false;
+      }
       if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M.WL(1, "voice is default"); return true; }
       if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
         if (string.IsNullOrEmpty(voicePack.vobank)) { Log.M.WL(1, "empty vobank"); return true; };
@@ -541,6 +555,20 @@ namespace CustomVoices {
         Log.M.TWL(0, "PilotRepresentation.PlayPilotVO " + __instance.pilot.pilotDef.Description.Id + " voice:" + __instance.pilot.pilotDef.Voice + " phrase:" + VOEnumValue);
         string voice = __instance.pilot.pilotDef.Voice;
         if (string.IsNullOrEmpty(voice)) { Log.M.WL(1, "empty voice"); return true; }
+        if (voice == "pilot_player_computer") {
+          Log.M.WL(1, "voice is pilot_player_computer");
+          if (!___startedVOStatic)
+          {
+            ___startedVOStatic = true;
+            WwiseManager.PostEvent(AudioEventList_vo.vo_static_start_pilot, __instance.audioObject);
+          }
+          AudioEventManager.InterruptPilotVOForTeam(__instance.pilot.ParentActor.team, null);
+          WwiseManager.SetSwitch(VOEnumValue, __instance.audioObject);
+          WwiseManager.PostEvent(AudioEventList_vo.vo_play_pilot_player_character, __instance.audioObject, (callback != null) ? callback : new AkCallbackManager.EventCallback(__instance.AudioCallback), in_cookie);
+          __instance.IsPlayingVO(true);
+          __instance.CurrentVOPriority(priority);
+          return false;
+        }
         if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M.WL(1, "voice is default"); return true; }
         if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
           if (string.IsNullOrEmpty(voicePack.vobank)) { Log.M.WL(1, "empty vobank"); return true; };
@@ -589,6 +617,22 @@ namespace CustomVoices {
         Log.M.TWL(0, e.ToString(), true);
         return true;
       }
+      return false;
+    }
+  }
+  [HarmonyPatch(typeof(PilotRepresentation))]
+  [HarmonyPatch("LoadSoundbanks")]
+  [HarmonyPatch(MethodType.Normal)]
+  public static class PilotRepresentation__LoadSoundbanks__Patch
+  {
+    public static bool Prefix(ref PilotRepresentation __instance, ref bool ___startedVOStatic)
+    {
+      string voice = __instance.pilot.pilotDef.Voice;
+      if (string.IsNullOrEmpty(voice) || voice != "pilot_player_computer") { return true; }
+      AudioBankList bankId = AudioBankList.vo_pilot_player_character;
+      HBS.SceneSingletonBehavior<WwiseManager>.Instance.LoadBank(bankId);
+      HBS.SceneSingletonBehavior<WwiseManager>.Instance.voBanks.Add("vo_pilot_player_character");
+      ___startedVOStatic = true;
       return false;
     }
   }

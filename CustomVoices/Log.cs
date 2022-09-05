@@ -11,7 +11,7 @@ namespace CustomVoices {
   }
   public class LogFile {
     private string m_logfile;
-    private Mutex mutex;
+    private SpinLock spinlock;
     private StringBuilder m_cache = null;
     private StreamWriter m_fs = null;
     private bool enabled;
@@ -29,7 +29,7 @@ namespace CustomVoices {
     }
     public LogFile(string name, bool enabled) {
       try {
-        this.mutex = new Mutex();
+        this.spinlock = new SpinLock();
         this.enabled = enabled;
         this.m_cache = new StringBuilder();
         this.m_logfile = Path.Combine(Log.BaseDirectory, name);
@@ -41,23 +41,26 @@ namespace CustomVoices {
       }
     }
     public void flush() {
-      if (this.mutex.WaitOne(1000)) {
+      bool locked = false;
+      try {
+        if (spinlock.IsHeldByCurrentThread == false) { spinlock.Enter(ref locked); }
         this.m_fs.Write(this.m_cache.ToString());
         this.m_fs.Flush();
         this.m_cache.Length = 0;
-        this.mutex.ReleaseMutex();
+      }finally{
+        if (locked) { spinlock.Exit(); }
       }
     }
     public void W(string line, bool isCritical = false) {
-      if ((this.enabled) || (isCritical)) {
-        if (this.mutex.WaitOne(1000)) {
-          m_cache.Append(line);
-          //this.m_fs.Write(line);
-          this.mutex.ReleaseMutex();
-        }
-        //if (isCritical) { this.flush(); };
-        if (m_logfile.Length > Log.flushBufferLength) { this.flush(); };
+      bool locked = false;
+      try {
+        if (spinlock.IsHeldByCurrentThread == false) { spinlock.Enter(ref locked); }
+        m_cache.Append(line);
+      } finally {
+        if (locked) { spinlock.Exit(); }
       }
+      if (isCritical) { this.flush(); };
+      if (m_logfile.Length > Log.flushBufferLength) { this.flush(); };
     }
     public void WL(string line, bool isCritical = false) {
       line += "\n"; this.W(line, isCritical);
@@ -83,6 +86,7 @@ namespace CustomVoices {
   }
   public static class Log {
     private static Dictionary<LogFileType, LogFile> logs = new Dictionary<LogFileType, LogFile>();
+    public static bool enabled = true;
     //private static string m_assemblyFile;
     public static string BaseDirectory;
     public static readonly int flushBufferLength = 16 * 1024;
@@ -91,7 +95,7 @@ namespace CustomVoices {
     public static void flushThreadProc() {
       while (Log.flushThreadActive == true) {
         Thread.Sleep(30 * 1000);
-        //Log.LogWrite("Log flushing\n");
+        Log.M?.TWL(0,"Log flushing");
         Log.flush();
       }
     }
@@ -102,7 +106,7 @@ namespace CustomVoices {
       if (Log.logs.ContainsKey(LogFileType.Main) == false) { return; }
       Log.logs[LogFileType.Main].W(line, isCritical);
     }
-    public static LogFile M { get { return Log.logs[LogFileType.Main]; } }
+    public static LogFile M { get { return enabled?Log.logs[LogFileType.Main]:null; } }
     public static void InitLog() {
       //LogFile file = new LogFile("CAC_main_log.txt", CustomAmmoCategories.Settings.debugLog);
       Log.logs.Add(LogFileType.Main, new LogFile("CV_main_log.txt", Core.settings.debugLog));

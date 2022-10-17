@@ -91,7 +91,7 @@ namespace CustomVoices {
         if (__instance.playInBackground == false) {
           if (AudioEngine.Instance != null) {
             AudioEngine.Instance.MasterVolume = 0f;
-            Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
+            //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
           }
         }
       } catch (Exception e) {
@@ -109,7 +109,7 @@ namespace CustomVoices {
       try {
         if (AudioEngine.Instance != null) {
           AudioEngine.Instance.MasterVolume = AudioEventManager.MasterVolume / 100f;
-          Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
+          //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
         }
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
@@ -129,18 +129,18 @@ namespace CustomVoices {
         float ___currentVolumeAmbience,
         float ___currentVolumeCinematic
       ) {
-      Log.M?.TWL(0, "AudioSettingsModule.ApplyUpdatedSlider");
+      //Log.M?.TWL(0, "AudioSettingsModule.ApplyUpdatedSlider");
       try {
         AudioEngine.Instance.MasterVolume = ___currentVolumeMaster / 100f;
-        Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
+        //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MasterVolume:" + AudioEngine.Instance.MasterVolume);
         AudioEngine.Instance.MusicBus.volume = (___currentVolumeMusic / 100f) * Core.settings.volumes.MusicBus;
-        Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MusicBus.volume:" + AudioEngine.Instance.MusicBus?.volume);
+        //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.MusicBus.volume:" + AudioEngine.Instance.MusicBus?.volume);
         AudioEngine.Instance.VoiceOverBus.volume = (___currentVolumeVoice / 100f) * Core.settings.volumes.VoiceOverBus;
-        Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.VoiceVolume.volume:" + AudioEngine.Instance.VoiceOverBus?.volume);
+        //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.VoiceVolume.volume:" + AudioEngine.Instance.VoiceOverBus?.volume);
         AudioEngine.Instance.CombatBus.volume = (___currentVolumeSFX / 100f) * Core.settings.volumes.CombatBus;
-        Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.CombatBus.volume:" + AudioEngine.Instance.CombatBus?.volume);
+        //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.CombatBus.volume:" + AudioEngine.Instance.CombatBus?.volume);
         AudioEngine.Instance.AmbientBus.volume = (___currentVolumeAmbience / 100f) * Core.settings.volumes.AmbientBus;
-        Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.AmbienceVolume.volume:" + AudioEngine.Instance.AmbientBus?.volume);
+        //Log.M?.WL(1, "AudioEngine(" + AudioEngine.Instance.GetInstanceID() + ").Instance.AmbienceVolume.volume:" + AudioEngine.Instance.AmbientBus?.volume);
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
       }
@@ -152,50 +152,88 @@ namespace CustomVoices {
     public float max3D { get; set; } = 1000f;
   }
   public class AudioObject: MonoBehaviour {
-    protected Dictionary<string, AudioEngine.AudioChannel> currentlyPlaying = new Dictionary<string, AudioEngine.AudioChannel>();
-    protected Queue<string> playingQueue = new Queue<string>();
+    public class Playing {
+      public int counter { get; set; } = 0;
+      public AudioEngine.AudioChannel channel { get; set; } = null;
+      public Playing(AudioEngine.AudioChannel channel) {
+        this.channel = channel;
+        counter = 1;
+      }
+    }
+    protected Dictionary<string, Playing> currentlyPlaying = new Dictionary<string, Playing>();
     public void Start() {
       AudioEngine.Instance.RegisterAudioObject(this);
     }
     public void OnDisable() {
       foreach(var channel in this.currentlyPlaying) {
-        channel.Value.Pause();
+        channel.Value.channel.Pause();
       }
     }
     public void OnEnable() {
       foreach (var channel in this.currentlyPlaying) {
-        channel.Value.Resume();
+        channel.Value.channel.Resume();
       }
     }
     private void ClearNotPlaying() {
       HashSet<string> toDelete = new HashSet<string>();
-      foreach (var channel in this.currentlyPlaying) {
-        if (channel.Value.detached) { toDelete.Add(channel.Key); };
+      foreach (var playing in this.currentlyPlaying) {
+        if (playing.Value.channel.detached) {
+          --playing.Value.counter;
+          if (playing.Value.counter <= 0) {
+            toDelete.Add(playing.Key);
+          } else {
+            playing.Value.channel = AudioEngine.Instance.CombatBus.Play(playing.Value.channel.parent.name, playing.Value.channel.loop);
+          }
+        };
       }
       foreach(string name in toDelete) { currentlyPlaying.Remove(name); }
+      //playingQueue.
     }
     public void LateUpdate() {
       ClearNotPlaying();
     }
     public void Play(string name, bool loop) {
       try {
-        if(currentlyPlaying.TryGetValue(name, out var existingChannel)) {
-          if (loop) { return; }
-          if (existingChannel.loop) { return; }
-          playingQueue.Enqueue(name);
+        if (currentlyPlaying.TryGetValue(name, out var existingChannel)) {
+          existingChannel.channel.loop = loop;
+          ++existingChannel.counter;
           return;
         }
         AudioEngine.AudioChannel channel = AudioEngine.Instance.CombatBus.Play(name, loop);
-        currentlyPlaying.Add(name, channel);
+        currentlyPlaying.Add(name, new Playing(channel));
+      } catch (Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
+      }
+    }
+    public void Play(string name, bool loop, List<AudioEngine.AudioChannelEvent> events) {
+      try {
+        if(currentlyPlaying.TryGetValue(name, out var existingChannel)) {
+          existingChannel.channel.loop = loop;
+          ++existingChannel.counter;
+          return;
+        }
+        AudioEngine.AudioChannel channel = AudioEngine.Instance.CombatBus.Play(name, loop, events);
+        currentlyPlaying.Add(name, new Playing(channel));
       }catch(Exception e) {
         Log.M?.TWL(0,e.ToString(),true);
       }
     }
     public void Stop(string name) {
       try {
-        if(currentlyPlaying.TryGetValue(name,out var channel)) {
-          channel.Stop();
-          currentlyPlaying.Remove(name);
+        if(currentlyPlaying.TryGetValue(name,out var playing)) {
+          --playing.counter;
+          if (playing.counter <= 0) {
+            playing.channel.Stop();
+            currentlyPlaying.Remove(name);
+          } else {
+            if (playing.channel.loop == false) {
+              if (playing.channel.detached) {
+                playing.channel = AudioEngine.Instance.CombatBus.Play(playing.channel.parent.name, false);
+              } else {
+                playing.channel.Play();
+              }
+            }
+          }
         }
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
@@ -203,14 +241,14 @@ namespace CustomVoices {
     }
     public void OnDestroy() {
       foreach (var channel in this.currentlyPlaying) {
-        channel.Value.Stop();
+        channel.Value.channel.Stop();
       }
       currentlyPlaying.Clear();
       AudioEngine.Instance.UnregisterAudioObject(this);
     }
     public void Update3DPosition(Vector3D mbPosition) {
-      foreach (var channel in this.currentlyPlaying) {
-        channel.Value.UpdatePosition(mbPosition);
+      foreach (var playing in this.currentlyPlaying) {
+        playing.Value.channel.UpdatePosition(mbPosition);
       }
     }
   }
@@ -359,7 +397,7 @@ namespace CustomVoices {
       internal float volume {
         get { return (float)Bass.ChannelGetAttribute(handle, ChannelAttribute.Volume); }
         set {
-          Log.M?.TWL(0, "AudioChannel.set_volume:"+this.parent.name+":"+value);
+          //Log.M?.TWL(0, "AudioChannel.set_volume:"+this.parent.name+":"+value);
           Bass.ChannelSetAttribute(handle, ChannelAttribute.Volume, (double)value);
         }
       }

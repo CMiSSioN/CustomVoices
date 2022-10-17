@@ -34,10 +34,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="0Harmony">
-      <HintPath>$(BattleTechGameDir)\Mods\ModTek\0Harmony.dll</HintPath>
+      <HintPath>..\..\..\Mods\ModTek\AssembliesOverride\0Harmony.dll</HintPath>
     </Reference>
     <Reference Include="Assembly-CSharp">
-      <HintPath>$(BattleTechGameDir)\BattleTech_Data\Managed\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\..\..\Mods\.modtek\AssembliesInjected\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="CustomLocalSettings">
       <HintPath>..\..\Mods\CustomLocalSettings\CustomLocalSettings.dll</HintPath>

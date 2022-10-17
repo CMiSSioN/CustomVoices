@@ -15,16 +15,15 @@ namespace CustomVoices {
     public static bool Prefix(AudioState_Music_State newMusicState, AudioSwitch_Mission_Status newMissionStatus, AudioState_Player_State newPlayerState, bool stopOldMusic, ref bool __result) {
       Log.M?.TWL(0, $"AudioEventManager.SetMusicState {newMusicState} {newMissionStatus} {newPlayerState} stopOldMusic:{stopOldMusic} custMusicIsPlayed:{CustomMusicHelper.isMusicPlayed}");
       try {
-        if (AkSoundEngine.GetIsGameObjectActive(WwiseManager.MusicAudioObject.gameObject) == false) {
-          stopOldMusic = true;
+        if(CustomMusicHelper.hasMusicFiles(newMusicState, newMissionStatus, newPlayerState) == false) {
+          if (CustomMusicHelper.isMusicPlayed) { CustomMusicHelper.StopMusic(); }; return true;
         }
-        if (!stopOldMusic && newMusicState == AudioEventManager.musicCurrentMusicState && (newMissionStatus == AudioEventManager.musicCurrentMissionStatus && newPlayerState == AudioEventManager.musicCurrentPlayerState)) {
-          __result = false;
-          return false;
+        string customSample = CustomMusicHelper.getMusicFile(newMusicState, newMissionStatus, newPlayerState, out bool needtochange);
+        Log.M?.WL(1,$"change:{needtochange} sample:{customSample}");
+        if (string.IsNullOrEmpty(customSample)) { if (CustomMusicHelper.isMusicPlayed) { CustomMusicHelper.StopMusic(); }; return true; }
+        if (needtochange || stopOldMusic) {
+          if (CustomMusicHelper.isMusicPlayed) { CustomMusicHelper.StopMusic(); };
         }
-        if (CustomMusicHelper.isMusicPlayed) { CustomMusicHelper.StopMusic(); }
-        string customSample = CustomMusicHelper.getMusicFile(newMusicState, newMissionStatus, newPlayerState);
-        if (string.IsNullOrEmpty(customSample)) { return true; }
         AudioEventManager.StopMusic();
         AudioEventManager.musicCurrentMusicState = newMusicState;
         AudioEventManager.musicCurrentMissionStatus = newMissionStatus;
@@ -33,7 +32,9 @@ namespace CustomVoices {
         CustomMusicHelper.musicCurrentMusicState = newMusicState;
         CustomMusicHelper.musicCurrentMissionStatus = newMissionStatus;
         CustomMusicHelper.musicCurrentPlayerState = newPlayerState;
-        CustomMusicHelper.Play(customSample);
+        if (CustomMusicHelper.isMusicPlayed == false) {
+          CustomMusicHelper.Play(customSample);
+        }
         __result = true;
         return false;
       }catch(Exception e) {
@@ -42,24 +43,25 @@ namespace CustomVoices {
       return true;
     }
   }
-  [HarmonyPatch(typeof(AudioEventManager))]
-  [HarmonyPatch("StopMusic")]
-  [HarmonyPatch(MethodType.Normal)]
-  [HarmonyPatch(new Type[] {  })]
-  public static class AudioEventManager_StopMusic {
-    public static void Postfix() {
-      try {
-        CustomMusicHelper.StopMusic();
-      } catch (Exception e) {
-        Log.M?.TWL(0, e.ToString(), true);
-      }
-    }
-  }
+  //[HarmonyPatch(typeof(AudioEventManager))]
+  //[HarmonyPatch("StopMusic")]
+  //[HarmonyPatch(MethodType.Normal)]
+  //[HarmonyPatch(new Type[] {  })]
+  //public static class AudioEventManager_StopMusic {
+  //  public static void Postfix() {
+  //    try {
+  //      CustomMusicHelper.StopMusic();
+  //    } catch (Exception e) {
+  //      Log.M?.TWL(0, e.ToString(), true);
+  //    }
+  //  }
+  //}
   public static class CustomMusicHelper {
     public static bool isMusicPlayed { get { return currentMusic != null; } }
     public static void StopMusic() {
       if (currentMusic != null) {
         Log.M?.TWL(0, "CustomMusicHelper.StopMusic " + currentMusic.parent.name,true);
+        Log.M?.WL(0, Environment.StackTrace);
         currentMusic.Stop();
         currentMusic = null;
       }
@@ -67,11 +69,11 @@ namespace CustomVoices {
     public static AudioState_Music_State musicCurrentMusicState = AudioState_Music_State.None;
     public static AudioSwitch_Mission_Status musicCurrentMissionStatus = AudioSwitch_Mission_Status.ambient;
     public static AudioState_Player_State musicCurrentPlayerState = AudioState_Player_State.None;
-
+    private static HashSet<string> lastMusicList = new HashSet<string>();
     public static void MusicSampleIsOver() {
       if (isMusicPlayed == false) { return; }
       Log.M?.TWL(0, "CustomMusicHelper.MusicSampleIsOver event", true);
-      string customSample = CustomMusicHelper.getMusicFile(musicCurrentMusicState, musicCurrentMissionStatus, musicCurrentPlayerState);
+      string customSample = CustomMusicHelper.getMusicFile(musicCurrentMusicState, musicCurrentMissionStatus, musicCurrentPlayerState, out bool needtochange);
       if (string.IsNullOrEmpty(customSample)) { AudioEventManager.SetMusicState(musicCurrentMusicState, musicCurrentMissionStatus, musicCurrentPlayerState, true); return; }
       Play(customSample);
     }
@@ -85,19 +87,30 @@ namespace CustomVoices {
       return musicFiles[newMusicState][newMissionStatus][newPlayerState].Count > 0;
     }
     private static string lastPlayed { get; set; } = string.Empty;
-    public static string getMusicFile(AudioState_Music_State newMusicState, AudioSwitch_Mission_Status newMissionStatus, AudioState_Player_State newPlayerState) {
+    public static bool hasMusicFiles(AudioState_Music_State newMusicState, AudioSwitch_Mission_Status newMissionStatus, AudioState_Player_State newPlayerState) {
+      return musicFiles[newMusicState][newMissionStatus][newPlayerState].Count > 0;
+    }
+    public static string getMusicFile(AudioState_Music_State newMusicState, AudioSwitch_Mission_Status newMissionStatus, AudioState_Player_State newPlayerState, out bool needtochange) {
+      needtochange = false;
       if (musicFiles[newMusicState][newMissionStatus][newPlayerState].Count == 0) { return string.Empty; }
-      if (musicFiles[newMusicState][newMissionStatus][newPlayerState].Count == 1) { return musicFiles[newMusicState][newMissionStatus][newPlayerState][0]; }
+      needtochange = (lastMusicList.SetEquals(musicFiles[newMusicState][newMissionStatus][newPlayerState]) == false);
+      lastMusicList = musicFiles[newMusicState][newMissionStatus][newPlayerState];
+      if (musicFiles[newMusicState][newMissionStatus][newPlayerState].Count == 1) { return musicFiles[newMusicState][newMissionStatus][newPlayerState].First(); }
       string result = string.Empty;
       int watchdog = 0;
+      List<string> list = musicFiles[newMusicState][newMissionStatus][newPlayerState].ToList();
       do {
-        result = musicFiles[newMusicState][newMissionStatus][newPlayerState][UnityEngine.Random.Range(0, musicFiles[newMusicState][newMissionStatus][newPlayerState].Count)];
+        result = list[UnityEngine.Random.Range(0, list.Count)];
         ++watchdog;
         if (watchdog > 10) { break; }
       } while (result == lastPlayed);
       return result;
     }
-    private static Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>> musicFiles = new Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>>();
+    //public class MusicFiles {
+    //  public Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>> musicFiles = new Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>>();
+    //  public Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, AudioState_Player_State>>> linkage3 = new Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, AudioState_Player_State>>>();
+    //}
+    private static Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, HashSet<string>>>> musicFiles = new Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, HashSet<string>>>>();
     public static string SearchForBaseDir(string modDir) {
       string cur_dir = modDir;
       while (string.IsNullOrEmpty(cur_dir) == false) {
@@ -129,7 +142,7 @@ namespace CustomVoices {
       string modtekDir = SearchForModTek(modDir);
       string cacheFile = Path.Combine(string.IsNullOrEmpty(modtekDir)? musicDir: modtekDir, "music_cache.json");
       if (File.Exists(cacheFile)) {
-        musicFiles = JsonConvert.DeserializeObject<Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>>>(File.ReadAllText(cacheFile));
+        musicFiles = JsonConvert.DeserializeObject<Dictionary<AudioState_Music_State, Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, HashSet<string>>>>>(File.ReadAllText(cacheFile));
         Log.M?.TWL(0, "CustomMusicHelper.Init finish");
         return;
       }
@@ -139,24 +152,24 @@ namespace CustomVoices {
       foreach (AudioState_Music_State musicState in musicStates) {
         string musicStateDir = Path.Combine(musicDir, "MusicState_"+ musicState);
         if (Directory.Exists(musicStateDir) == false) { Directory.CreateDirectory(musicStateDir); }
-        Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>> musicStateFiles = new Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, List<string>>>();
+        Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, HashSet<string>>> musicStateFiles = new Dictionary<AudioSwitch_Mission_Status, Dictionary<AudioState_Player_State, HashSet<string>>>();
         musicFiles.Add(musicState, musicStateFiles);
         foreach (AudioSwitch_Mission_Status missionStatus in missionStatuses) {
           string missionStatusDir = Path.Combine(musicStateDir, "MissionStatus_" + missionStatus);
           if (Directory.Exists(missionStatusDir) == false) { Directory.CreateDirectory(missionStatusDir); }
-          Dictionary<AudioState_Player_State, List<string>> missionStatusFiles = new Dictionary<AudioState_Player_State, List<string>>();
+          Dictionary<AudioState_Player_State, HashSet<string>> missionStatusFiles = new Dictionary<AudioState_Player_State, HashSet<string>>();
           musicStateFiles.Add(missionStatus, missionStatusFiles);
           foreach (AudioState_Player_State playerState in playerStates) {
             string playerStateDir = Path.Combine(missionStatusDir, "PlayerState_" + playerState);
             if (Directory.Exists(playerStateDir) == false) { Directory.CreateDirectory(playerStateDir); }
-            List<string> playerStateFiles = new List<string>();
+            HashSet<string> playerStateFiles = new HashSet<string>();
             missionStatusFiles.Add(playerState, playerStateFiles);
             string[] musicSamples = Directory.GetFiles(playerStateDir, "*.mp3", SearchOption.AllDirectories);
-            playerStateFiles.AddRange(musicSamples);
+            foreach(string f in musicSamples) playerStateFiles.Add(f);
             musicSamples = Directory.GetFiles(playerStateDir, "*.ogg", SearchOption.AllDirectories);
-            playerStateFiles.AddRange(musicSamples);
+            foreach (string f in musicSamples) playerStateFiles.Add(f);
             musicSamples = Directory.GetFiles(playerStateDir, "*.wav", SearchOption.AllDirectories);
-            playerStateFiles.AddRange(musicSamples);
+            foreach (string f in musicSamples) playerStateFiles.Add(f);
           }
         }
       }
@@ -171,7 +184,7 @@ namespace CustomVoices {
               if (ps == playerState) { continue; }
               string psfile = Path.Combine(psDir, "PlayerState_" + ps+".txt");
               if (File.Exists(psfile)) {
-                musicFiles[musicState][missionStatus][playerState].AddRange(musicFiles[musicState][missionStatus][ps]);
+                foreach (string f in musicFiles[musicState][missionStatus][ps]) musicFiles[musicState][missionStatus][playerState].Add(f);
               }
             }
           }
@@ -187,7 +200,7 @@ namespace CustomVoices {
             string mstfile = Path.Combine(mstdir, "MissionStatus_" + mst + ".txt");
             if (File.Exists(mstfile) == false) { continue; }
             foreach (AudioState_Player_State ps in playerStates) {
-              musicFiles[musicState][missionStatus][ps].AddRange(musicFiles[musicState][mst][ps]);
+              foreach (string f in musicFiles[musicState][mst][ps]) musicFiles[musicState][missionStatus][ps].Add(f);
             }
           }
         }
@@ -201,7 +214,7 @@ namespace CustomVoices {
           if (File.Exists(msfile) == false) { continue; }
           foreach (AudioSwitch_Mission_Status mst in missionStatuses) {
             foreach (AudioState_Player_State ps in playerStates) {
-              musicFiles[musicState][mst][ps].AddRange(musicFiles[ms][mst][ps]);
+              foreach (string f in musicFiles[ms][mst][ps]) musicFiles[musicState][mst][ps].Add(f);
             }
           }
         }

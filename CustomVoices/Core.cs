@@ -768,36 +768,12 @@ namespace CustomVoices {
         CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomVoices", "Custom Voices", AudioEngine.ResetSettings, AudioEngine.ReadSettings);
         CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomAudio", "Custom audio", Core.resetVolumes, Core.readVolumes);
         CustomMusicHelper.Init(Log.BaseDirectory);
-
-        // Init BASS using the default output device
-        //if (Bass.Init()) {
-        //  // Create a stream from a file
-        //  Log.M?.TWL(0, "Bass inited");
-        //  int test_sample1 = Bass.SampleLoad(Path.Combine(Log.BaseDirectory, "c1ddb51e28646d1.mp3"), 0, 0, 32, BassFlags.Default);
-        //  Log.M?.TWL(0, "test sample 1 created:"+test_sample1);
-        //  int test_sample2 = Bass.SampleLoad(Path.Combine(Log.BaseDirectory, "getout.ogg"), 0, 0, 32, BassFlags.Default);
-        //  Log.M?.TWL(0, "test sample 2 created:" + test_sample2);
-        //  int test_channel1 = Bass.SampleGetChannel(test_sample1, false);
-        //  Log.M?.TWL(0, "test channel 1 created:" + test_channel1);
-        //  int test_channel2 = Bass.SampleGetChannel(test_sample2, false);
-        //  Log.M?.TWL(0, "test channel 2 created:" + test_channel2);
-        //  bool ret = Bass.ChannelSetAttribute(test_channel2, ChannelAttribute.Volume, 0.01);
-        //  Log.M?.TWL(0, "ChannelSetAttribute:" + ret);
-        //  ret = Bass.ChannelPlay(test_channel2);
-        //  Log.M?.TWL(0, "ChannelPlay test_sample2:" + ret+" "+Bass.LastError);
-        //  Thread.Sleep(3000);
-        //  ret = Bass.ChannelPlay(test_channel1);
-        //  Log.M?.TWL(0, "ChannelPlay test_sample1:" + ret + " " + Bass.LastError);
-        //AudioEngine.Instance.MusicBus.Play("getout", true);
-        //Thread.Sleep(3000);
-        //AudioEngine.Instance.MusicBus.Play("c1ddb51e28646d1", false);
-        //} else Log.M?.TWL(0, "BASS could not be initialized!",true);
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
       }
     }
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr LoadLibrary(String fileName);
+    //[DllImport("kernel32.dll")]
+    //private static extern IntPtr LoadLibrary(String fileName);
 
     public static void Init(string directory, string settingsJson) {
       Log.BaseDirectory = directory;

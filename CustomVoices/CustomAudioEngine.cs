@@ -289,9 +289,23 @@ namespace CustomVoices {
         if (samplesManifest.ContainsKey(item.Key)) { samplesManifest[item.Key] = item.Value; } else { samplesManifest.Add(item.Key, item.Value); }
       }
     }
+    public static void getAudioFiles(string[] files) {
+      foreach (var filepath in files) {
+        string filename = Path.GetFileNameWithoutExtension(filepath);
+        VersionManifestEntry entry = new VersionManifestEntry(filename, filepath, "AudioFile", DateTime.Now, "1.0");
+        if (samplesManifest.ContainsKey(filename)) { samplesManifest[filename] = entry; } else { samplesManifest.Add(filename, entry); }
+      }
+    }
     public static void getAudioFilesSettings(Dictionary<string, VersionManifestEntry> manifest) {
       foreach (var item in manifest) {
         if (samplesInfoManifest.ContainsKey(item.Key)) { samplesInfoManifest[item.Key] = item.Value; } else { samplesInfoManifest.Add(item.Key, item.Value); }
+      }
+    }
+    public static void getAudioFilesSettings(string[] files) {
+      foreach (var filepath in files) {
+        string filename = Path.GetFileNameWithoutExtension(filepath);
+        VersionManifestEntry entry = new VersionManifestEntry(filename, filepath, "AudioFileSettings", DateTime.Now, "1.0");
+        if (samplesInfoManifest.ContainsKey(filename)) { samplesInfoManifest[filename] = entry; } else { samplesInfoManifest.Add(filename, entry); }
       }
     }
     private float f_MasterVolume = 0f;
@@ -588,13 +602,21 @@ namespace CustomVoices {
         }
       }
       public void position3DUpdate() {
-        Vector3 cameraPosition = CameraControl.HasInstance ? CameraControl.Instance.CameraPos : Vector3.zero;
-        foreach(var audio3Dobject in this.audioObjects3D) {
-          Vector3 position = audio3Dobject.transform.position - cameraPosition;
-          ManagedBass.Vector3D mbPosition = new Vector3D(position.x, position.y, position.z);
-          audio3Dobject.Update3DPosition(mbPosition);
+        try {
+          Vector3? cameraPosition = null;
+          if (UnityGameInstance.BattleTechGame.Combat != null) {
+            cameraPosition = CameraControl.HasInstance ? CameraControl.Instance.CameraPos : Vector3.zero;
+          }
+          foreach (var audio3Dobject in this.audioObjects3D) {
+            Vector3 position = Vector3.zero;
+            if (cameraPosition != null) { position = audio3Dobject.transform.position - cameraPosition.Value; }
+            ManagedBass.Vector3D mbPosition = new Vector3D(position.x, position.y, position.z);
+            audio3Dobject.Update3DPosition(mbPosition);
+          }
+          ManagedBass.Bass.Apply3D();
+        }catch(Exception e) {
+          Log.M?.TWL(0, e.ToString());
         }
-        ManagedBass.Bass.Apply3D();
       }
       public AudioChannel PlayFile(string path, bool loop, List<AudioChannelEvent> events = null) {
         if (File.Exists(path) == false) { throw new System.Exception("no audio file with " + path + " in file system"); }

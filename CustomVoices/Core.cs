@@ -739,10 +739,45 @@ namespace CustomVoices {
       Core.settings.volumes = JsonConvert.DeserializeObject<Volumes>(json);
     }
     public static readonly float Epsilon = 0.001f;
-
+    public static string FindGameRoot(string directory) {
+      string temp = Path.GetDirectoryName(directory);
+      while (string.IsNullOrEmpty(temp) == false) {
+        if (Directory.Exists(Path.Combine(temp, ".modtek"))) { return Path.GetDirectoryName(temp); }
+        temp = Path.GetDirectoryName(temp);
+      }
+      return string.Empty;
+    }
     public static void FinishedLoading(List<string> loadOrder, Dictionary<string, Dictionary<string, VersionManifestEntry>> customResources) {
       Log.M?.TWL(0, "FinishedLoading", true);
       try {
+        try {
+          string root = FindGameRoot(Log.BaseDirectory);
+          if (string.IsNullOrEmpty(root) == false) {
+            Log.M?.WL(1, $"Game root folder:{root}", true);
+            if (Directory.Exists(Path.Combine(root, "Mods_sfx")) == false) { Directory.CreateDirectory(Path.Combine(root, "Mods_sfx")); }
+            if (Directory.Exists(Path.Combine(root, "Mods_sfx", "voicepacks")) == false) { Directory.CreateDirectory(Path.Combine(root, "Mods_sfx", "voicepacks")); }
+            if (Directory.Exists(Path.Combine(root, "Mods_sfx", "audio")) == false) { Directory.CreateDirectory(Path.Combine(root, "Mods_sfx", "audio")); }
+            if (Directory.Exists(Path.Combine(root, "Mods_sfx", "audio_settings")) == false) { Directory.CreateDirectory(Path.Combine(root, "Mods_sfx", "audio_settings")); }
+            foreach (string filepath in Directory.GetFiles(Path.Combine(root, "Mods_sfx", "voicepacks"), "*.json", SearchOption.AllDirectories)) {
+              try {
+                VoicePackDef def = JsonConvert.DeserializeObject<VoicePackDef>(File.ReadAllText(filepath));
+                if (extVoicePacks.ContainsKey(def.name) == false) {
+                  extVoicePacks.Add(def.name, def);
+                } else {
+                  extVoicePacks[def.name] = def;
+                }
+              } catch (Exception e) {
+                Log.M?.TWL(0, filepath + "\n" + e.ToString(), true);
+              }
+            }
+            AudioEngine.getAudioFiles(Directory.GetFiles(Path.Combine(root, "Mods_sfx", "audio"), "*.ogg", SearchOption.AllDirectories));
+            AudioEngine.getAudioFiles(Directory.GetFiles(Path.Combine(root, "Mods_sfx", "audio"), "*.wav", SearchOption.AllDirectories));
+            AudioEngine.getAudioFiles(Directory.GetFiles(Path.Combine(root, "Mods_sfx", "audio"), "*.mp3", SearchOption.AllDirectories));
+            AudioEngine.getAudioFilesSettings(Directory.GetFiles(Path.Combine(root, "Mods_sfx", "audio_settings"), "*.json", SearchOption.AllDirectories));
+          }
+        }catch(Exception e) {
+          Log.M?.TWL(0, e.ToString(), true);
+        }
         foreach (var customResource in customResources) {
           Log.M?.WL(1, "customResource:" + customResource.Key);
           if (customResource.Key == nameof(VoicePackDef)) {

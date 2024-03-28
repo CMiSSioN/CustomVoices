@@ -2,12 +2,13 @@
 using BattleTech.Data;
 using BattleTech.Portraits;
 using BattleTech.UI;
-using Harmony;
+using HarmonyLib;
 using HBS;
 using HBS.Data;
 using Localize;
 using ManagedBass;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -367,70 +368,76 @@ namespace CustomVoices {
     public static void lastVOWasLight(bool value) { f_lastVOWasLight.SetValue(null, value); }
     private static string prevStopEvent = string.Empty;
     public static bool Prefix(string voice, ref bool __result) {
-      //float scale = CustomAmmoCategories.Settings.bloodSettings.DecalScale[];
-      Log.M?.TWL(0, "SGBarracksDossierPanel.PlayVO " + voice);
-      uint ret = uint.MaxValue;
-      AudioEngine.Instance?.VoiceOverBus?.StopAll();
-      if (string.IsNullOrEmpty(prevStopEvent) == false) {
-        ret = WwiseManager.PostEvent(prevStopEvent, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        Log.M?.WL(1, "playing prev stop event:" + prevStopEvent + ":" + ret);
-        prevStopEvent = string.Empty;
-      }
-      if (string.IsNullOrEmpty(voice)) { Log.M?.WL(1, "empty voice"); return true; }
-      if (voice == "pilot_player_computer") {
-        Log.M?.WL(1, "voice is pilot_player_computer");
-        WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
-        WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
-        WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
-        return false;
-      }
-      if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M?.WL(1, "voice is default"); return true; }
-      if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
-        if (string.IsNullOrEmpty(voicePack.vobank) == false) {
-          if (ModTek.ModTek.soundBanks.ContainsKey(voicePack.vobank) == false) { Log.M?.WL(1, "unknown sound bank"); return true; }
-          if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
-            Log.M?.WL(1, "bank is not loaded");
-            VOSoundBankLoadHelper.LoadVOSoundBank(ModTek.ModTek.soundBanks[voicePack.vobank]);
+      try {
+        //float scale = CustomAmmoCategories.Settings.bloodSettings.DecalScale[];
+        Log.M?.TWL(0, "SGBarracksDossierPanel.PlayVO " + voice);
+        uint ret = uint.MaxValue;
+        AudioEngine.Instance?.VoiceOverBus?.StopAll();
+        if (string.IsNullOrEmpty(prevStopEvent) == false) {
+          ret = WwiseManager.PostEvent(prevStopEvent, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          Log.M?.WL(1, "playing prev stop event:" + prevStopEvent + ":" + ret);
+          prevStopEvent = string.Empty;
+        }
+        if (string.IsNullOrEmpty(voice)) { Log.M?.WL(1, "empty voice"); return true; }
+        if (voice == "pilot_player_computer") {
+          Log.M?.WL(1, "voice is pilot_player_computer");
+          WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
+          WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
+          WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
+          return false;
+        }
+        if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M?.WL(1, "voice is default"); return true; }
+        if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
+          if (string.IsNullOrEmpty(voicePack.vobank) == false) {
+            if (ModTek.ModTek.soundBanks.ContainsKey(voicePack.vobank) == false) { Log.M?.WL(1, "unknown sound bank"); return true; }
             if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
-              Log.M?.WL(1, "still bank is not loaded");
-              return true;
-            } else {
-              Log.M?.WL(1, "bank is loaded");
+              Log.M?.WL(1, "bank is not loaded");
+              VOSoundBankLoadHelper.LoadVOSoundBank(ModTek.ModTek.soundBanks[voicePack.vobank]);
+              if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
+                Log.M?.WL(1, "still bank is not loaded");
+                return true;
+              } else {
+                Log.M?.WL(1, "bank is loaded");
+              }
+            }
+            if (string.IsNullOrEmpty(voicePack.stop_event) == false) {
+              ret = WwiseManager.PostEvent(voicePack.stop_event, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+              Log.M?.WL(1, "playing stop event:" + voicePack.stop_event + ":" + ret);
+              prevStopEvent = voicePack.stop_event;
             }
           }
-          if (string.IsNullOrEmpty(voicePack.stop_event) == false) {
-            ret = WwiseManager.PostEvent(voicePack.stop_event, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-            Log.M?.WL(1, "playing stop event:" + voicePack.stop_event + ":" + ret);
-            prevStopEvent = voicePack.stop_event;
+          WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          WwiseManager.SetSwitch<AudioSwitch_dialog_character_type_pilots>(voicePack.baseVoice, WwiseManager.GlobalAudioObject);
+          //WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
+          bool isDark = SGBarracksDossierPanel_PlayVO.lastVOWasLight();
+          if (SGBarracksDossierPanel_PlayVO.lastVOWasLight()) {
+            WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.dark, WwiseManager.GlobalAudioObject);
+          } else {
+            WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.light, WwiseManager.GlobalAudioObject);
           }
-        }
-        WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        WwiseManager.SetSwitch<AudioSwitch_dialog_character_type_pilots>(voicePack.baseVoice, WwiseManager.GlobalAudioObject);
-        //WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
-        bool isDark = SGBarracksDossierPanel_PlayVO.lastVOWasLight();
-        if (SGBarracksDossierPanel_PlayVO.lastVOWasLight()) {
-          WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.dark, WwiseManager.GlobalAudioObject);
+          SGBarracksDossierPanel_PlayVO.lastVOWasLight(!SGBarracksDossierPanel_PlayVO.lastVOWasLight());
+          string eventId = voicePack.getPhrase(isDark, AudioSwitch_dialog_lines_pilots.chosen);
+          if ((string.IsNullOrEmpty(eventId) == false) && (string.IsNullOrEmpty(voicePack.vobank) == false)) {
+            ret = WwiseManager.PostEvent(eventId, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+            Log.M?.WL(1, "playing event:" + eventId + ":" + ret);
+          } else if (string.IsNullOrEmpty(voicePack.vobank)) {
+            Log.M?.WL(1, "playing event external audio " + eventId);
+            AudioEngine.Instance?.VoiceOverBus?.Play(eventId, false);
+          } else {
+            WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
+            int num2 = (int)WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_play_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          }
         } else {
-          WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.light, WwiseManager.GlobalAudioObject);
+          return true;
         }
-        SGBarracksDossierPanel_PlayVO.lastVOWasLight(!SGBarracksDossierPanel_PlayVO.lastVOWasLight());
-        string eventId = voicePack.getPhrase(isDark, AudioSwitch_dialog_lines_pilots.chosen);
-        if ((string.IsNullOrEmpty(eventId) == false)&&(string.IsNullOrEmpty(voicePack.vobank) == false)) {
-          ret = WwiseManager.PostEvent(eventId, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-          Log.M?.WL(1, "playing event:" + eventId + ":" + ret);
-        } else if (string.IsNullOrEmpty(voicePack.vobank)) {
-          Log.M?.WL(1, "playing event external audio "+ eventId);
-          AudioEngine.Instance?.VoiceOverBus?.Play(eventId, false);
-        } else { 
-          WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
-          int num2 = (int)WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_play_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        }
-      } else {
+        __result = true;
+        return false;
+      }catch(Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
         return true;
       }
-      __result = true;
-      return false;
     }
+    
   }
   [HarmonyPatch(typeof(SG_HiringHall_DetailPanel))]
   [HarmonyPatch("PlayPilotSelectionVO")]
@@ -442,75 +449,80 @@ namespace CustomVoices {
     public static void lastVOWasLight(this SG_HiringHall_DetailPanel panel, bool value) { f_lastVOWasLight.SetValue(panel, value); }
     private static string prevStopEvent = string.Empty;
     public static bool Prefix(SG_HiringHall_DetailPanel __instance, Pilot p) {
-      //float scale = CustomAmmoCategories.Settings.bloodSettings.DecalScale[];
-      Log.M?.TWL(0, "SG_HiringHall_DetailPanel.PlayPilotSelectionVO " + p.Description.Id + ":" + p.pilotDef.Voice);
-      uint ret = uint.MaxValue;
-      AudioEngine.Instance?.VoiceOverBus?.StopAll();
-      if (string.IsNullOrEmpty(prevStopEvent) == false) {
-        ret = WwiseManager.PostEvent(prevStopEvent, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        Log.M?.WL(1, "playing prev stop event:" + prevStopEvent + ":" + ret);
-        prevStopEvent = string.Empty;
-      }
-      //if (p.pilotDef.Description.Id == "pilot_backer_SwansonA") { p.pilotDef.SetVoice("tex_voice"); };
-      string voice = p.pilotDef.Voice;
-      if (string.IsNullOrEmpty(voice)) { Log.M?.WL(1, "empty voice"); return true; }
-      if (voice == "pilot_player_computer") {
-        Log.M?.WL(1, "voice is pilot_player_computer");
-        WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
-        WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
-        WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
-        return false;
-      }
-      if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M?.WL(1, "voice is default"); return true; }
-      if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
-        if (string.IsNullOrEmpty(voicePack.vobank) == false) {
-          if (ModTek.ModTek.soundBanks.ContainsKey(voicePack.vobank) == false) { Log.M?.WL(1, "unknown sound bank"); return true; }
-          if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
-            Log.M?.WL(1, "bank is not loaded");
-            VOSoundBankLoadHelper.LoadVOSoundBank(ModTek.ModTek.soundBanks[voicePack.vobank]);
+      try {
+        //float scale = CustomAmmoCategories.Settings.bloodSettings.DecalScale[];
+        Log.M?.TWL(0, "SG_HiringHall_DetailPanel.PlayPilotSelectionVO " + p.Description.Id + ":" + p.pilotDef.Voice);
+        uint ret = uint.MaxValue;
+        AudioEngine.Instance?.VoiceOverBus?.StopAll();
+        if (string.IsNullOrEmpty(prevStopEvent) == false) {
+          ret = WwiseManager.PostEvent(prevStopEvent, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          Log.M?.WL(1, "playing prev stop event:" + prevStopEvent + ":" + ret);
+          prevStopEvent = string.Empty;
+        }
+        //if (p.pilotDef.Description.Id == "pilot_backer_SwansonA") { p.pilotDef.SetVoice("tex_voice"); };
+        string voice = p.pilotDef.Voice;
+        if (string.IsNullOrEmpty(voice)) { Log.M?.WL(1, "empty voice"); return true; }
+        if (voice == "pilot_player_computer") {
+          Log.M?.WL(1, "voice is pilot_player_computer");
+          WwiseManager.PostEvent(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject);
+          WwiseManager.SetSwitch(AudioSwitch_dialog_lines_computer_ai.welcome_commander, WwiseManager.GlobalAudioObject);
+          WwiseManager.PostEvent(AudioEventList_vo.vo_play_computer_ai, WwiseManager.GlobalAudioObject);
+          return false;
+        }
+        if (Utilities.EnumTryParse<AudioSwitch_dialog_character_type_pilots>(voice, out AudioSwitch_dialog_character_type_pilots enumValue)) { Log.M?.WL(1, "voice is default"); return true; }
+        if (Core.TryGetExtVoice(voice, out VoicePackDef voicePack)) {
+          if (string.IsNullOrEmpty(voicePack.vobank) == false) {
+            if (ModTek.ModTek.soundBanks.ContainsKey(voicePack.vobank) == false) { Log.M?.WL(1, "unknown sound bank"); return true; }
             if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
-              Log.M?.WL(1, "still bank is not loaded");
-              return true;
-            } else {
-              Log.M?.WL(1, "bank is loaded");
+              Log.M?.WL(1, "bank is not loaded");
+              VOSoundBankLoadHelper.LoadVOSoundBank(ModTek.ModTek.soundBanks[voicePack.vobank]);
+              if (ModTek.ModTek.soundBanks[voicePack.vobank].loaded == false) {
+                Log.M?.WL(1, "still bank is not loaded");
+                return true;
+              } else {
+                Log.M?.WL(1, "bank is loaded");
+              }
             }
           }
-        }
-        if (string.IsNullOrEmpty(voicePack.stop_event) == false) {
-          ret = WwiseManager.PostEvent(voicePack.stop_event, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-          Log.M?.WL(1, "playing stop event:" + voicePack.stop_event + ":" + ret);
-          prevStopEvent = voicePack.stop_event;
-        }
-        WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        WwiseManager.SetSwitch<AudioSwitch_dialog_character_type_pilots>(voicePack.baseVoice, WwiseManager.GlobalAudioObject);
-        //WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
-        bool isDark = __instance.lastVOWasLight();
-        if (__instance.lastVOWasLight()) {
-          Log.M?.WL(1, "switch dark");
-          WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.dark, WwiseManager.GlobalAudioObject);
+          if (string.IsNullOrEmpty(voicePack.stop_event) == false) {
+            ret = WwiseManager.PostEvent(voicePack.stop_event, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+            Log.M?.WL(1, "playing stop event:" + voicePack.stop_event + ":" + ret);
+            prevStopEvent = voicePack.stop_event;
+          }
+          WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_stop_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          WwiseManager.SetSwitch<AudioSwitch_dialog_character_type_pilots>(voicePack.baseVoice, WwiseManager.GlobalAudioObject);
+          //WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
+          bool isDark = __instance.lastVOWasLight();
+          if (__instance.lastVOWasLight()) {
+            Log.M?.WL(1, "switch dark");
+            WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.dark, WwiseManager.GlobalAudioObject);
+          } else {
+            Log.M?.WL(1, "switch light");
+            WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.light, WwiseManager.GlobalAudioObject);
+          }
+          __instance.lastVOWasLight(!__instance.lastVOWasLight());
+          Log.M?.WL(1, "lastVOWasLight:" + __instance.lastVOWasLight() + " isDarkTheme:" + WwiseManager.GlobalAudioObject.isDarkTheme());
+          string eventId = voicePack.getPhrase(isDark, AudioSwitch_dialog_lines_pilots.chosen);
+          if ((string.IsNullOrEmpty(eventId) == false) && (string.IsNullOrEmpty(voicePack.vobank) == false)) {
+            //AKRESULT res = AkSoundEngine.SetRTPCValue(254523064, 100f);
+            //Log.M?.WL(1, "SetRTPCValue result:" + res);
+            ret = WwiseManager.PostEvent(eventId, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+            Log.M?.WL(1, "playing event:" + eventId + ":" + ret);
+          } else if (string.IsNullOrEmpty(voicePack.vobank)) {
+            Log.M?.WL(1, "playing event external audio " + eventId);
+            AudioEngine.Instance?.VoiceOverBus?.Play(eventId, false);
+          } else {
+            WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
+            int num2 = (int)WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_play_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
+          }
         } else {
-          Log.M?.WL(1, "switch light");
-          WwiseManager.SetSwitch<AudioSwitch_dialog_dark_light>(AudioSwitch_dialog_dark_light.light, WwiseManager.GlobalAudioObject);
+          return true;
         }
-        __instance.lastVOWasLight(!__instance.lastVOWasLight());
-        Log.M?.WL(1, "lastVOWasLight:" + __instance.lastVOWasLight()+ " isDarkTheme:"+ WwiseManager.GlobalAudioObject.isDarkTheme());
-        string eventId = voicePack.getPhrase(isDark, AudioSwitch_dialog_lines_pilots.chosen);
-        if ((string.IsNullOrEmpty(eventId) == false) && (string.IsNullOrEmpty(voicePack.vobank) == false)) {
-          //AKRESULT res = AkSoundEngine.SetRTPCValue(254523064, 100f);
-          //Log.M?.WL(1, "SetRTPCValue result:" + res);
-          ret = WwiseManager.PostEvent(eventId, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-          Log.M?.WL(1, "playing event:" + eventId + ":" + ret);
-        } else if (string.IsNullOrEmpty(voicePack.vobank)) {
-          Log.M?.WL(1, "playing event external audio " + eventId);
-          AudioEngine.Instance?.VoiceOverBus?.Play(eventId, false);
-        } else {
-          WwiseManager.SetSwitch<AudioSwitch_dialog_lines_pilots>(AudioSwitch_dialog_lines_pilots.chosen, WwiseManager.GlobalAudioObject);
-          int num2 = (int)WwiseManager.PostEvent<AudioEventList_vo>(AudioEventList_vo.vo_play_pilots, WwiseManager.GlobalAudioObject, (AkCallbackManager.EventCallback)null, (object)null);
-        }
-      } else {
+        return false;
+      }catch(Exception e) {
+        Log.M?.TWL(0, e.ToString(), true);
         return true;
       }
-      return false;
     }
   }
   [HarmonyPatch(typeof(AudioEventManager))]
@@ -711,17 +723,124 @@ namespace CustomVoices {
       baseVoice = AudioSwitch_dialog_character_type_pilots.m_bear01;
     }
   }
+  public class BASSDistFactor {
+    public float distanceFactor = 1f;
+    public override string ToString() {
+      if (Mathf.Abs(distanceFactor - 1f) < 0.01f) { return Strings.CurrentCulture == Strings.Culture.CULTURE_RU_RU? "метры":"meters"; }
+      if (Mathf.Abs(distanceFactor - 0.9144f) < 0.01f) { return Strings.CurrentCulture == Strings.Culture.CULTURE_RU_RU ? "ярды" : "yards"; }
+      if (Mathf.Abs(distanceFactor - 0.3048f) < 0.01f) { return Strings.CurrentCulture == Strings.Culture.CULTURE_RU_RU ? "футы" : "feet"; }
+      return $"{distanceFactor}";
+    }
+  }
+  [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+  public class NextBASSDistFactor : CustomSettings.NextSettingValue {
+    public override void Next(object settings) {
+      Log.M?.TWL(0, $"NextBASSDistFactor.Next {settings.GetType()}");
+      if (settings is Volumes volumes) {
+        try {
+          if (Mathf.Abs(volumes.bassDistFactor.distanceFactor - 1f) < 0.01f) { volumes.bassDistFactor.distanceFactor = 0.9144f; }else
+          if (Mathf.Abs(volumes.bassDistFactor.distanceFactor - 0.9144f) < 0.01f) { volumes.bassDistFactor.distanceFactor = 0.3048f; }else
+          { volumes.bassDistFactor.distanceFactor = 1f; }
+          Bass.Set3DFactors(volumes.bassDistFactor.distanceFactor, -1f,-1f);
+        } catch (Exception e) {
+          Log.M?.TWL(0, e.ToString(), true);
+          UIManager.logger.LogException(e);
+        }
+      }
+    }
+    public NextBASSDistFactor() { }
+  }
+  [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+  public class NextBASSRolloffFactor : CustomSettings.NextSettingValue {
+    public override void Next(object settings) {
+      Log.M?.TWL(0, $"NextBASSRolloffFactor.Next {settings.GetType()}");
+      if (settings is Volumes volumes) {
+        try {
+          volumes.bassRollOffFactor += 0.1f;
+          if (volumes.bassRollOffFactor > 2.0f) { volumes.bassRollOffFactor = 0.1f; }
+          Bass.Set3DFactors(-1f, volumes.bassRollOffFactor, -1f);
+        } catch (Exception e) {
+          Log.M?.TWL(0, e.ToString(), true);
+          UIManager.logger.LogException(e);
+        }
+      }
+    }
+    public NextBASSRolloffFactor() { }
+  }
+
   public class Volumes {
     public float MusicBus { get; set; } = 1f;
     public float AmbientBus { get; set; } = 1f;
     public float CombatBus { get; set; } = 1f;
     public float VoiceOverBus { get; set; } = 1f;
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_EN_US, "Audio output")]
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_RU_RU, "Аудио выход")]
+    [CustomSettings.IsLocalSetting(false)]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "Audio output for custom audio engine")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Аудио выход для кастмного айдио движка")]
+    [NextAudioOutput]
+    public CustomOutputId outputId { get; set; } = new CustomOutputId();
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_EN_US, "LibBASS 3D position distance factor")]
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_RU_RU, "Фактор расстояния для 3D звука libBASS")]
+    [CustomSettings.IsLocalSetting(false)]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "LibBASS 3D position distance factor")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Фактор расстояния для 3D звука libBASS")]
+    [NextBASSDistFactor]
+    public BASSDistFactor bassDistFactor { get; set; } = new BASSDistFactor();
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_EN_US, "LibBASS 3D position rolloff factor")]
+    [CustomSettings.LocalSettingName(Strings.Culture.CULTURE_RU_RU, "Фактор убывания громкости с расстоянием для 3D звука libBASS")]
+    [CustomSettings.IsLocalSetting(false)]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_EN_US, "LibBASS 3D position rolloff factor")]
+    [CustomSettings.LocalSettingDescription(Strings.Culture.CULTURE_RU_RU, "Фактор убывания громкости с расстоянием для 3D звука libBASS")]
+    [NextBASSRolloffFactor]
+    public float bassRollOffFactor { get; set; } = 1f;
+  }
+  public class CustomOutputId {
+    public static Dictionary<int, string> outputs = new Dictionary<int, string>();
+    public int outputId { get; set; } = -1;
+    public override string ToString() {
+      if (outputs.TryGetValue(outputId, out var result)) { return result; }
+      return $"({this.outputId})not exists";
+    }
+  }
+  [System.AttributeUsage(System.AttributeTargets.Property, AllowMultiple = false)]
+  public class NextAudioOutput : CustomSettings.NextSettingValue {
+    public override void Next(object settings) {
+      Log.M?.TWL(0, $"NextAudioOutput.Next {settings.GetType()}");
+      if(settings is Volumes volumes) {
+        try {
+          var iterator = CustomOutputId.outputs.GetEnumerator();
+          int prevOut = volumes.outputId.outputId;
+          ++volumes.outputId.outputId;
+          if (CustomOutputId.outputs.ContainsKey(volumes.outputId.outputId) == false) {
+            volumes.outputId.outputId = -1;
+          }
+          if(prevOut != volumes.outputId.outputId) {
+            if ((prevOut != -2) && (AudioEngine.EngineInited)) {
+              AudioEngine.Instance?.VoiceOverBus?.StopAll();
+              AudioEngine.Instance?.MusicBus?.StopAll();
+              AudioEngine.Instance?.AmbientBus?.StopAll();
+              AudioEngine.Instance?.CombatBus?.StopAll();
+              AudioEngine.Instance?.Free();
+              AudioEngine.EngineInited = false;
+            }
+            AudioEngine.Init(false);
+            AudioEngine.Instance?.VoiceOverBus?.Play("nominal", false);
+          }
+        }catch(Exception e) {
+          Log.M?.TWL(0, e.ToString(), true);
+          UIManager.logger.LogException(e);
+        }
+      }
+    }
+    public NextAudioOutput() { }
   }
   public class Settings {
     public bool debugLog { get; set; }
     public Volumes volumes { get; set; } = new Volumes();
     public string voiceSelectorName { get; set; }
     public float voiceSelectorDownOffset { get; set; }
+    public HashSet<uint> suppressWwiseIds { get; set; } = new HashSet<uint>();
     public Dictionary<string, string> defaultVoices { get; set; }
     public Settings() { debugLog = false; defaultVoices = new Dictionary<string, string>(); voiceSelectorName = "voice"; voiceSelectorDownOffset = 60f; }
   }
@@ -738,6 +857,19 @@ namespace CustomVoices {
     public static void readVolumes(string json) {
       Core.settings.volumes = JsonConvert.DeserializeObject<Volumes>(json);
     }
+    public static Volumes DefaultSettings() {
+      return Core.global_volumes;
+    }
+    public static Volumes CurrentSettings() {
+      return Core.settings.volumes;
+    }
+    public static string SaveSettings(object settings) {
+      Volumes set = settings as Volumes;
+      if (set == null) { set = Core.global_volumes; }
+      JObject jsettigns = JObject.FromObject(set);
+      return jsettigns.ToString(Formatting.Indented);
+    }
+
     public static readonly float Epsilon = 0.001f;
     public static string FindGameRoot(string directory) {
       string temp = Path.GetDirectoryName(directory);
@@ -801,7 +933,7 @@ namespace CustomVoices {
           }
         }
         CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomVoices", "Custom Voices", AudioEngine.ResetSettings, AudioEngine.ReadSettings);
-        CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomAudio", "Custom audio", Core.resetVolumes, Core.readVolumes);
+        CustomSettings.ModsLocalSettingsHelper.RegisterLocalSettings("CustomAudio", "Custom audio", Core.resetVolumes, Core.readVolumes, Core.DefaultSettings, Core.CurrentSettings, Core.SaveSettings);
         CustomMusicHelper.Init(Log.BaseDirectory);
       } catch (Exception e) {
         Log.M?.TWL(0, e.ToString(), true);
@@ -817,7 +949,7 @@ namespace CustomVoices {
       Log.InitLog();
       Log.M?.TWL(0, "Initing... " + directory + " version: " + Assembly.GetExecutingAssembly().GetName().Version + "\n", true);
       try {
-        var harmony = HarmonyInstance.Create("ru.mission.customvoices");
+        var harmony = new Harmony("ru.mission.customvoices");
         harmony.PatchAll(Assembly.GetExecutingAssembly());
         MethodInfo bPlayPilotVO = typeof(PilotRepresentation).GetMethod("PlayPilotVO");
         MethodInfo miPlayPilotVO = bPlayPilotVO.MakeGenericMethod(new Type[] { typeof(AudioSwitch_dialog_lines_pilots) });
@@ -832,10 +964,10 @@ namespace CustomVoices {
         PERSISTENT_BANK_IDS.Add("vo_f_kamea");
         PERSISTENT_BANK_IDS.Add("vo_m_raju");
         typeof(WwiseDefinitions).GetField("PERSISTENT_BANK_IDS", BindingFlags.Static | BindingFlags.Public).SetValue(null,PERSISTENT_BANK_IDS.ToArray());
-        AudioEngine.Init();
       } catch (Exception e) {
         Log.LogWrite(e.ToString(),true);
       }
+      AudioEngine.Init(true);
     }
   }
 }
